@@ -1,59 +1,56 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"github.com/karmdip-mi/go-fitz"
 	"image/jpeg"
 	"os"
-	"path"
-	"path/filepath"
+	stdpath "path"
 	"strings"
+
+	"log"
+
+	"github.com/karmdip-mi/go-fitz"
 )
 
+var path string
+
+func init() {
+	flag.StringVar(&path, "path", "", "-path=/path/to/pdf/file")
+}
+
 func main() {
-
-	var files []string
-
-	root := "pdf/"
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if filepath.Ext(path) == ".pdf" {
-			files = append(files, path)
-		}
-		return nil
-	})
+	flag.Parse()
+	if path == "" {
+		panic("path must be specified")
+	}
+	dir := stdpath.Dir(path)
+	name := stdpath.Base(path)
+	imgDir := dir + "/" + strings.Split(name, ".")[0]
+	log.Printf("use path: %s, dir: %s, name: %s', imgDir: %s", path, dir, name, imgDir)
+	err := os.MkdirAll(imgDir, 0755)
 	if err != nil {
 		panic(err)
 	}
-	for _, file := range files {
-		doc, err := fitz.New(file)
+	doc, err := fitz.New(path)
+	if err != nil {
+		panic(err)
+	}
+
+	// Extract pages as images
+	for n := 0; n < doc.NumPage(); n++ {
+		img, err := doc.Image(n)
 		if err != nil {
 			panic(err)
 		}
-		folder := strings.TrimSuffix(path.Base(file), filepath.Ext(path.Base(file)))
-
-		// Extract pages as images
-		for n := 0; n < doc.NumPage(); n++ {
-			img, err := doc.Image(n)
-			if err != nil {
-				panic(err)
-			}
-			err = os.MkdirAll("img/"+folder, 0755)
-			if err != nil {
-				panic(err)
-			}
-
-			f, err := os.Create(filepath.Join("img/"+folder+"/", fmt.Sprintf("image-%05d.jpg", n)))
-			if err != nil {
-				panic(err)
-			}
-
-			err = jpeg.Encode(f, img, &jpeg.Options{Quality: jpeg.DefaultQuality})
-			if err != nil {
-				panic(err)
-			}
-
-			f.Close()
-
+		f, err := os.Create(stdpath.Join(imgDir, fmt.Sprintf("image-%05d.jpg", n)))
+		if err != nil {
+			panic(err)
 		}
+		err = jpeg.Encode(f, img, &jpeg.Options{Quality: jpeg.DefaultQuality})
+		if err != nil {
+			panic(err)
+		}
+		f.Close()
 	}
 }
